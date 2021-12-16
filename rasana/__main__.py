@@ -119,7 +119,11 @@ def build(website_path: str, output_path: str, base_url: str) -> None:
                 for s in html.find_all('script'):
                     if not s.get('type') or s.get('type').lower() == 'javascript':
                         s.string = minify_js(s.string)['code']
-                html = html.encode(formatter='html5')
+                for s in html.find_all('style'):
+                    if not s.get('type') or s.get('type').lower() == 'javascript':
+                        s.string = minify_css(s.string)['css']
+                
+                html = html.encode(encoding='utf8', formatter='html5')
                 with open(os.path.join(node_output_path, 'index.html'), 'wb') as f:
                     f.write(html)
                 if 'resources' in node['specs']:
