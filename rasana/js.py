@@ -31,17 +31,17 @@ minify_js.__context = MiniRacer()
 with open(os.path.join(os.path.dirname(__file__), './js/uglifyjs3.min.js')) as f:
     minify_js.__context.eval(f.read())
 
-def compile_ejs_template(template: str, parameters: list) -> Callable:
+def compile_ejs_template(template: str) -> Callable:
     def render(context: dict) -> str:
         return render.__context.call('render', context)
     render.__context = MiniRacer()
     def string_literal(text):
         return json.dumps(text)
-    escape_html_function = ''
-    compiled_template = 'function render({' + ','.join(parameters) + '}) {let result="";'
+    compiled_template = ''
     remove_succeeding_ws = False
     remove_succeeding_nl = False
     i = 0
+    result = ''
     for m in re.finditer('<%[^%].*?%>', template):
         code = m.group()
         operation = 0 # Add code to execution pipeline
@@ -61,12 +61,6 @@ def compile_ejs_template(template: str, parameters: list) -> Callable:
         elif code[2] == '-':
             operation = 1
             escape_code_output = True
-            if not escape_html_function:
-                escape_html_function = 'const HTML_SAFE_ALTERNATIVES = {'\
-                                           '"&":"&amp;","\\"":"&quot;","\'":"&apos;","<":"&lt;",">":"&gt;"'\
-                                        '};'\
-                                        'const escapeForHtml = '\
-                                            's => s.replace(/[&"\'<>]/g, c => HTML_SAFE_ALTERNATIVES[c]);'
         elif code[3] == '#':
             operation = 2 # No operation
         elif code[3] == '_':
@@ -94,11 +88,15 @@ def compile_ejs_template(template: str, parameters: list) -> Callable:
         i = m.end()
     if i < len(template):
         compiled_template += f'result+={string_literal(template[i:])};'
-    compiled_template += 'return result;}'
-    compiled_template = escape_html_function + compiled_template
-    render.__context.eval(compiled_template)
+    render.__context.eval(
+        compile_ejs_template.__compiled_ejs_template.replace(
+            '// body_of_rendered_ejs_function',
+            compiled_template
+        )
+    )
     return render
-
+with open(os.path.join(os.path.dirname(__file__), './js/compiled_ejs_template.js')) as f:
+    compile_ejs_template.__compiled_ejs_template = f.read()
 
 __all__ = [
     'minify_css',
