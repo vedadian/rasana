@@ -2,6 +2,7 @@ import os
 import re
 import json
 import shutil
+import urllib
 from glob import glob
 from typing import Callable
 from bs4 import BeautifulSoup as bs4
@@ -79,7 +80,7 @@ def build(website_path: str, output_path: str, base_url: str) -> None:
             with open(os.path.join(theme_specs['base_path'], theme_specs['templates'][template_name])) as f:
                 get_template_renderer.__templates[template_name] = compile_ejs_template(
                     f.read(),
-                    ['website_specs', 'theme_specs', 'items', 'node_specs']
+                    ['websiteSpecs', 'themeSpecs', 'items', 'nodeSpecs', 'breadCrumb']
                 )
         return get_template_renderer.__templates[template_name]
     get_template_renderer.__templates = {}
@@ -97,6 +98,9 @@ def build(website_path: str, output_path: str, base_url: str) -> None:
                 if 'template' not in node['specs']:
                     # TODO: Warn the inconsistency
                     return
+                extra_stylesheets = []
+                if 'extraStylesheets' in node['specs']:
+                    extra_stylesheets = node['specs']['extraStylesheets']
                 if 'markdowns' in node['specs']:
                     md_vars = {}
                     for var_name, file_name in node['specs']['markdowns'].items():
@@ -108,12 +112,14 @@ def build(website_path: str, output_path: str, base_url: str) -> None:
                             pass
                     if 'markdown' not in additional_stylesheets:
                         additional_stylesheets['markdown'] = get_markdown_stylesheet()
+                    extra_stylesheets.append('markdown')
                 html_renderer = get_template_renderer(node['specs']['template'])
                 html = html_renderer({
-                    'website_specs':website_specs,
-                    'theme_specs': theme_specs,
+                    'websiteSpecs':website_specs,
+                    'themeSpecs': theme_specs,
                     'items': items,
-                    'node_specs': node['specs']
+                    'nodeSpecs': node['specs'],
+                    'breadCrumb': [e for e in relative_url.split('/') if e]
                 })
                 html = bs4(html, features="html.parser")
                 for s in html.find_all('script'):
@@ -122,7 +128,20 @@ def build(website_path: str, output_path: str, base_url: str) -> None:
                 for s in html.find_all('style'):
                     if not s.get('type') or s.get('type').lower() == 'javascript':
                         s.string = minify_css(s.string)['css']
-                
+                for s in extra_stylesheets:
+                    new_stylesheet_node = html.new_tag('link')
+                    new_stylesheet_node['rel'] = 'stylesheet'
+                    new_stylesheet_node['href'] = s
+                    html.find('head').append(new_stylesheet_node)
+                if 'inlineStyles' in node['specs']:
+                    new_stylesheet_node = html.new_tag('style')
+                    new_stylesheet_node.string = get_file_contents(
+                        os.path.join(
+                            website_path, base_path,
+                            node['specs']['inlineStyles']
+                        )
+                    )
+                    html.find('head').append(new_stylesheet_node)
                 html = html.encode(encoding='utf8', formatter='html5')
                 with open(os.path.join(node_output_path, 'index.html'), 'wb') as f:
                     f.write(html)
