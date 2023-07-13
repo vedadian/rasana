@@ -1,9 +1,29 @@
-from genericpath import isfile
+# =================================================================================
+#  Copyright (c) 2023 Behrooz Vedadian
+ 
+#  Permission is hereby granted, free of charge, to any person obtaining a copy
+#  of this software and associated documentation files (the "Software"), to deal
+#  in the Software without restriction, including without limitation the rights
+#  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+#  copies of the Software, and to permit persons to whom the Software is
+#  furnished to do so, subject to the following conditions:
+ 
+#  The above copyright notice and this permission notice shall be included in all
+#  copies or substantial portions of the Software.
+ 
+#  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+#  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+#  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+#  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+#  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+#  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+#  SOFTWARE.
+# =================================================================================
+
 import os
 import re
 import json
 import shutil
-import urllib
 from glob import glob
 from typing import Callable, Optional
 from bs4 import BeautifulSoup as bs4
@@ -21,7 +41,7 @@ def build(website_path: str, output_path: str, base_url: str) -> None:
         base_url = base_url[:-1]
     website_specs_json = os.path.join(website_path, 'website.json')
     if not os.path.isfile(website_specs_json):
-        raise Exception(f'No `blog.json` file found in `{website_path}`')
+        raise Exception(f'No `website.json` file found in `{website_path}`')
     with open(website_specs_json) as f:
         website_specs = json.load(f)
     if 'theme' not in website_specs:
@@ -78,11 +98,11 @@ def build(website_path: str, output_path: str, base_url: str) -> None:
         )
     }
     additional_stylesheets = {}
-    if 'additional_stylesheets' in website_specs:
+    if 'additionalStylesheets' in website_specs:
         additional_stylesheets = {\
-            var_name: get_file_contents(file_path)\
+            var_name: get_file_contents(os.path.join(website_path, "additional_stylesheets", file_path))\
             for var_name, file_path in\
-            website_specs['additional_stylesheets'].items()\
+            website_specs['additionalStylesheets'].items()\
         }
     def get_template_renderer(template_name: str) -> Callable:
         if template_name not in get_template_renderer.__templates:
@@ -114,10 +134,10 @@ def build(website_path: str, output_path: str, base_url: str) -> None:
                             os.path.join(base_path, r),
                             os.path.join(node_output_path, rtype, r)
                         )
-    def build_root_contents(node: dict, base_path: str, node_output_path: str, relative_url: str, html_file_name: Optional[str] = 'index'):
+    def build_node_contents(node: dict, base_path: str, node_output_path: str, relative_url: str, html_file_name: Optional[str] = 'index'):
+        # TODO: Warn the inconsistency if `relative_url` is not empty
         if 'template' not in node:
-            # TODO: Warn the inconsistency if `relative_url` is not empty
-            node['template'] = 'default' if html_file_name == 'index' else html_file_name
+            node['template'] = 'default'
         extra_stylesheets = []
         if 'extraStylesheets' in node:
             extra_stylesheets = node['extraStylesheets']
@@ -141,6 +161,7 @@ def build(website_path: str, output_path: str, base_url: str) -> None:
             'websiteSpecs':website_specs,
             'themeSpecs': theme_specs,
             'items': items,
+            'baseURL': base_url,
             'nodeSpecs': node,
             'breadCrumb': [e for e in relative_url.split('/') if e]
         })
@@ -178,7 +199,7 @@ def build(website_path: str, output_path: str, base_url: str) -> None:
         os.makedirs(node_output_path, exist_ok=True)
         if 'specs' in node:
             built_urls.append(
-                build_root_contents(
+                build_node_contents(
                     node['specs'],
                     base_path,
                     node_output_path,
@@ -221,13 +242,13 @@ def build(website_path: str, output_path: str, base_url: str) -> None:
                     f'This page has been moved to <a href="{target_url}">here</a>.' +
                     '</p></html>'
                 )
-        build_root_contents(website_specs['mainPage'], website_specs['mainPage']['basePath'], output_path, '')
-        build_root_contents(website_specs['404'], website_specs['404']['basePath'], output_path, '', '404')
+        build_node_contents(website_specs['mainPage'], website_specs['mainPage']['basePath'], output_path, 'index')
+        build_node_contents(website_specs['404'], website_specs['404']['basePath'], output_path, '', '404')
         if 'robots' in website_specs:
             with open(os.path.join(output_path, 'robots.txt'), 'w') as f:
                 for user_agent, rules in website_specs['robots'].items():
                     f.write(f'User-agent: {user_agent}\n')
-                    for name, value in rules:
+                    for name, value in rules.items():
                         f.write(f'{name}: {value}\n')
                     f.write('\n')
                 f.write(f'Sitemap: {base_url}/sitemap.txt')
